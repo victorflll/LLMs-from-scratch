@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GPT por dentro — v4 · do texto à próxima previsão</title><link rel="stylesheet" href="gpt_journey.css"></head>
+<body>
+<a class="skip" href="#step1">Pular para a jornada</a>
+<header><a class="brand" href="#">GPT <span>por dentro</span></a><span class="edition">V4 / CAPÍTULO 04</span><a href="#sources">Dados e código ↗</a></header>
+<div class="opening">
+<div class="opening-copy"><div class="eyebrow">UMA JORNADA PELA ARQUITETURA GPT-2</div><h1>O caminho<br>de um token.</h1><p>Um GPT calcula a distribuição do próximo token a partir do contexto. A resposta cresce repetindo esse processo, um token por vez.</p><a class="primary" href="#step1">Acompanhar a frase <span>↓</span></a></div>
+<div class="opening-map" aria-label="Visão geral: texto, IDs, vetores, 12 blocos, logits"><div class="map-label">HELLO, I AM</div><div class="map-tokens"><span>15496</span><span>11</span><span>314</span><span>716</span></div><div class="beam"></div><div id="model-map"></div><div class="beam"></div><div class="map-label">50.257 LOGITS POR POSIÇÃO</div><p>12 linhas = blocos · 12 marcas por linha = cabeças de atenção</p></div>
+<div class="opening-bottom"><span>01 — 04 <span class="muted">/ role para acompanhar</span></span><span>Registros do notebook · pesos não treinados</span></div>
+</div>
+<div class="reading-bar"><span id="reading-label">Passo 1 / Preparando o texto</span><details class="index"><summary>Os 4 passos</summary><nav id="index"></nav></details><div id="reading-progress"></div></div>
+<main id="journey"></main>
+<section id="learning" class="learning" aria-labelledby="learning-title">
+<div class="eyebrow">DEPOIS DO PERCURSO / O PAPEL DO TREINAMENTO</div><h2 id="learning-title">A arquitetura está pronta.<br>A linguagem ainda precisa ser aprendida.</h2>
+<p class="learning-lead">A continuação acima vem de um modelo sem treinamento. As matrizes começam com valores aleatórios; os parâmetros de LayerNorm começam com escala 1 e deslocamento 0. Ter os blocos certos não basta para produzir texto coerente.</p>
+<div class="mode-controls" role="group" aria-label="Comparar geração e treinamento"><button data-mode="inference" aria-pressed="true">Durante a geração</button><button data-mode="training" aria-pressed="false">Durante o treinamento</button></div>
+<div id="learning-flow" role="status"></div>
+<details><summary>Como o texto fornece o alvo de treinamento?</summary><p>O alvo é o token seguinte na sequência original. Nos IDs já registrados, a posição de <code>Hello</code> tem como próximo alvo <code>,</code>; a vírgula tem <code>␠I</code>; e <code>␠I</code> tem <code>␠am</code>. O alvo após <code>␠am</code> exigiria a continuação do texto de treino.</p><p>É possível calcular a perda de várias posições no mesmo forward. A máscara causal impede que cada posição consulte seu futuro, mesmo com o texto inteiro disponível no batch.</p></details>
+<details><summary>Por que “GPT-2 124M” não é a contagem exata desta implementação?</summary><p id="parameter-note"></p><p>O nome identifica a configuração Small. Nesta implementação, <code>tok_emb</code> e <code>out_head</code> têm matrizes separadas; compartilhar essas matrizes reduz a contagem. O código também usa <code>qkv_bias=False</code>. As contagens do notebook estão em Dados e código.</p></details>
+<a class="bridge" href="#sources"><span>↓</span>Conferir os registros que sustentam a explicação.</a>
+</section>
+<section id="sources" class="sources"><div class="eyebrow">RASTREABILIDADE</div><h2>O que sustenta esta jornada.</h2><p>IDs, shapes e continuação vêm das saídas já salvas no notebook. Os diagramas explicam as operações de <code>gpt.py</code>. Os pesos, ativações e probabilidades desta execução não foram exportados; por isso, não são apresentados como valores medidos.</p><div id="source-records"></div><p><a href="https://github.com/rasbt/LLMs-from-scratch/blob/main/ch04/01_main-chapter-code/gpt.py">Código de referência do capítulo ↗</a></p><p><a href="../../lesson/chapter4_visual_lesson.ipynb">Notebook da aula ↗</a> · <a href="../../lesson/gpt.py">Implementação original ↗</a> · <a href="../v3/index.html">V3 ↗</a></p></section>
+<footer>Build a Large Language Model (From Scratch) · Sebastian Raschka <a href="#">Voltar ao início ↑</a></footer>
+<noscript>Ative JavaScript para explorar a jornada. Os dados também estão em chapter4_visual_lesson.ipynb.</noscript>
+<script src="gpt_journey_data.js"></script><script src="gpt_journey.js"></script>
+</body></html>

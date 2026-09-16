@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GPT por dentro — o caminho de um token</title><link rel="stylesheet" href="gpt_journey.css"></head>
+<body>
+<a class="skip" href="#journey">Pular para a jornada</a>
+<header><a class="brand" href="#">GPT <span>por dentro</span></a><span class="edition">CAPÍTULO 04 / RASCHKA</span><a href="#sources">Dados e código ↗</a></header>
+<div class="opening">
+<div class="opening-copy"><div class="eyebrow">UMA JORNADA PELA ARQUITETURA GPT-2</div><h1>O caminho<br>de um token.</h1><p>De uma frase a uma nova previsão.<br>Acompanhe o que entra, o que muda e o que segue adiante.</p><a class="primary" href="#s0">Acompanhar a frase <span>↓</span></a></div>
+<div class="opening-map" aria-label="Visão geral: texto, IDs, vetores, 12 blocos, logits"><div class="map-label">HELLO, I AM</div><div class="map-tokens"><span>15496</span><span>11</span><span>314</span><span>716</span></div><div class="beam"></div><div id="model-map"></div><div class="beam"></div><div class="map-label">50.257 LOGITS POR POSIÇÃO</div><p>12 linhas = blocos · 12 marcas por linha = cabeças de atenção</p></div>
+<div class="opening-bottom"><span>01 — 12 <span class="muted">/ role para acompanhar</span></span><span>Registros do notebook · pesos não treinados</span></div>
+</div>
+<div class="reading-bar"><span id="reading-label">O texto vira IDs</span><label>Acompanhar token <select id="token"><option value="0">Hello · 15496</option><option value="1">, · 11</option><option value="2">␠I · 314</option><option value="3" selected>␠am · 716</option></select></label><details class="index"><summary>Índice das 12 operações</summary><nav id="index"></nav></details><div id="reading-progress"></div></div>
+<div class="shape-guide">Como ler as formas: <code>(B, T, D)</code> = sequências, tokens, componentes. Neste registro: <code>B = 1 · T = 4 · D = 768</code>.</div>
+<main id="journey"></main>
+<section id="sources" class="sources"><div class="eyebrow">RASTREABILIDADE</div><h2>O que sustenta esta jornada.</h2><p>IDs, shapes e continuação vêm das saídas já salvas no notebook. Os diagramas explicam as operações de <code>gpt.py</code>. Os pesos, ativações e probabilidades desta execução não foram exportados; por isso, não são apresentados como valores medidos.</p><div id="source-records"></div><p><a href="../../lesson/chapter4_visual_lesson.ipynb">Notebook da aula ↗</a> · <a href="../../lesson/gpt.py">Implementação original ↗</a> · <a href="../v2-anterior/index.html">V2 anterior ↗</a></p></section>
+<footer>Build a Large Language Model (From Scratch) · Sebastian Raschka <a href="#">Voltar ao início ↑</a></footer>
+<noscript>Ative JavaScript para explorar a jornada. Os dados também estão em chapter4_visual_lesson.ipynb.</noscript>
+<script src="gpt_journey_data.js"></script><script src="gpt_journey.js"></script>
+</body></html>
