@@ -1,83 +1,314 @@
 'use strict';
+
 const data = window.JOURNEY_DATA;
-const cfg = data.config;
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmt = n => n.toLocaleString('pt-BR');
-const labels = ['Hello', ',', '␠I', '␠am'];
-let token = 3, group = 0, head = 0, block = 0, round = 0;
-const steps = [
- ['Tokenização','O texto vira IDs.','Antes de entrar na rede, a frase passa pelo tokenizer GPT-2. Cada fragmento recebe um índice do vocabulário. Um token não é necessariamente uma palavra.','Texto: Hello, I am','(1, 4)','GPTModel', 'Agora os IDs podem buscar suas linhas na tabela de embeddings.'],
- ['Token embedding','Um ID encontra seu vetor.','O ID não mede significado: ele é um endereço. A tabela tok_emb busca uma linha de 768 componentes para cada um dos quatro tokens.','(1, 4)','(1, 4, 768)','GPTModel','Temos a identidade dos tokens. Ainda falta informar a ordem.'],
- ['Posição + embedding','A ordem entra na soma.','Cada posição busca outro vetor de 768 componentes. Ele é somado ao embedding do token, componente por componente. Na avaliação, o dropout é desativado.','(1, 4, 768) + (4, 768)','(1, 4, 768)','GPTModel','Identidade e posição seguem juntas para o primeiro Transformer.'],
- ['LayerNorm','Preparar antes de relacionar.','A primeira normalização do bloco calcula média e variância nas 768 componentes de cada token. Isso ajuda a controlar a escala das ativações e estabilizar o treinamento. Tokens diferentes não se misturam nesta operação.','(1, 4, 768)','(1, 4, 768)','LayerNorm','O vetor normalizado alimenta as projeções de query, key e value.'],
- ['Atenção causal','Cada posição consulta o que já chegou.','As 12 cabeças relacionam cada posição consigo mesma e com as anteriores. Q e K determinam os pesos; a soma ponderada de V reúne a informação. A máscara impede que uma posição consulte tokens futuros. Depois, as cabeças são concatenadas e projetadas de volta para 768 dimensões.','(1, 4, 768)','(1, 4, 768)','MultiHeadAttention','A atenção produz uma atualização. O caminho original também chega à próxima soma.'],
- ['Primeira residual','Somar o contexto à entrada.','O bloco guardou sua entrada antes da normalização. Agora soma essa cópia à atualização produzida pela atenção, preservando a largura do vetor. O atalho também fornece um caminho direto para o gradiente no treinamento; ele ajuda a otimização, sem garantir que todo problema de gradiente desapareça.','x + atenção(norm1(x))','(1, 4, 768)','TransformerBlock','A primeira soma segue para a transformação de cada token.'],
- ['Feed-forward','Expandir. Transformar. Comprimir.','Após uma segunda LayerNorm, o vetor passa de 768 para 3.072 componentes, atravessa GELU e volta a 768. GELU introduz uma transformação não linear suave, que pode manter valores negativos pequenos. Os mesmos pesos são aplicados separadamente a cada posição.','(1, 4, 768)','(1, 4, 768)','FeedForward','O feed-forward entrega outra atualização, pronta para a segunda residual.'],
- ['Segunda residual','Completar um bloco.','A saída da primeira residual é preservada como atalho. A atualização do feed-forward é somada a ela. Os dois atalhos ficam dentro de cada bloco. A forma se mantém, mas o conteúdo do vetor é transformado.','r₁ + FFN(norm2(r₁))','(1, 4, 768)','TransformerBlock','Um bloco terminou. Sua saída se torna a entrada do próximo.'],
- ['Pilha de blocos','O mesmo percurso, 12 vezes.','O modelo empilha 12 Transformers. Cada um repete as mesmas operações com seus próprios parâmetros. O notebook registra a saída de todos os blocos.','(1, 4, 768)','(1, 4, 768)','GPTModel','Depois do último bloco, uma normalização final prepara a projeção de saída.'],
- ['LayerNorm final','Preparar a leitura final.','Esta normalização pertence ao modelo, fora da pilha de Transformers. Ela tem seus próprios parâmetros de escala e deslocamento.','(1, 4, 768)','(1, 4, 768)','LayerNorm','Cada vetor final pode agora ser projetado sobre o vocabulário.'],
- ['Projeção de saída','768 componentes. 50.257 logits.','A camada out_head combina as componentes do vetor para atribuir um score a cada entrada do vocabulário. Um logit é um score bruto, ainda não uma probabilidade.','(1, 4, 768)','(1, 4, 50257)','GPTModel','Para continuar o texto, generate_text_simple usa apenas os logits da última posição.'],
- ['Geração','A saída volta a ser entrada.','O código escolhe o maior logit da última posição com argmax e anexa seu ID. O contexto ampliado atravessa o modelo novamente. Aqui você percorre os IDs já registrados no notebook.','Última posição → argmax','Um novo ID no contexto','generate_text_simple','O ciclo de geração está completo. Falta entender como os pesos aprendem a fazer boas previsões.']
-];
-const flow = items => '<div class="flow">'+items.map((x,i)=>`${i?'<span class="arrow">→</span>':''}<div><strong>${x[0]}</strong><small>${x[1]}</small></div>`).join('')+'</div>';
-const note = text => `<p class="figure-note">${text}</p>`;
-const status = (id,text) => `<p class="selection" id="${id}" role="status">${text}</p>`;
-function normFigure(final=false){return flow([['x','768 componentes'],['(x − μ) / √(σ² + ε)','ε = 0,00001'],['γ × z + β','768 componentes']])+note(`Média e variância por token · variância populacional (unbiased=False). ${final?'Parâmetros da LayerNorm final.':'Parâmetros da primeira LayerNorm do bloco.'} A normalização aproxima média 0 e variância 1 antes de γ e β; após essa escala e deslocamento aprendidos, a saída não precisa manter esses valores.`);}
-function residualFigure(second){return `<div class="residual"><div class="shortcut">${second?'r₁':'x'} · cópia preservada <span>───────────────────┐</span></div>${flow([[second?'r₁':'x','entrada'],[second?'norm2 → FFN':'norm1 → atenção','atualização'],['+','soma elemento a elemento']])}</div>`+note('O atalho preserva a entrada. Na avaliação, o dropout não altera a atualização.');}
-function figure(i){
- switch(i){
- case 0:return '<div class="sentence">Hello, I am</div><div class="token-row">'+data.ids.map((id,j)=>`<button data-token="${j}" aria-pressed="${j===token}"><span>${labels[j]}</span><small>ID ${id}</small><small>posição ${j}</small></button>`).join('')+'</div>'+status('token-info',`Selecionado: ${labels[token]} → ID ${data.ids[token]} → posição ${token}.`)+note('Tokenização registrada · célula 15 do notebook. ␠ indica um espaço inicial.');
- case 1:return `<div class="lookup">E[<span class="chosen-id">${data.ids[token]}</span>, :] <span>→</span> <strong>768</strong><small>componentes</small></div><p>Abra um dos 12 grupos de 64 dimensões:</p><div class="groups">${Array.from({length:12},(_,j)=>`<button data-group="${j}" aria-pressed="${j===group}">${j*64}–${j*64+63}</button>`).join('')}</div><div id="dimension-grid"></div>`+status('dimension-info','')+note('Representação da tabela 50.257 × 768. Os índices são reais; os valores dos pesos não estão salvos.');
- case 2:return flow([['E[token, d]','identidade'],['+ P[posição, d]','ordem'],['x[posição, d]','soma, não concatenação']])+status('position-info',`Token ${data.ids[token]}, posição ${token}: E[${data.ids[token]}, d] + P[${token}, d].`)+note('O vetor de posição é compartilhado entre sequências do batch por broadcasting.');
- case 3:case 9:return normFigure(i===9);
- case 4:return `<label>Cabeça <select id="head">${Array.from({length:cfg.n_heads},(_,j)=>`<option value="${j}">${j+1} de ${cfg.n_heads}</option>`).join('')}</select></label><div class="matrix-wrap"><table class="matrix"><caption>Máscara causal · query nas linhas, key nas colunas</caption><thead><tr><th>Q ↓ / K →</th>${labels.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${labels.map((x,q)=>`<tr><th>${x}</th>${labels.map((y,k)=>`<td><button data-cell="${q},${k}" class="${k>q?'blocked':'allowed'}" aria-label="Query ${q}, key ${k}: ${k>q?'bloqueada':'permitida'}">${k>q?'×':'●'}</button></td>`).join('')}</tr>`).join('')}</tbody></table></div>`+status('attention-info','Selecione uma conexão para ver o que a máscara permite.')+note('● conexão permitida · × futuro bloqueado. As cores não representam pesos de atenção. Cada cabeça usa 64 componentes; as projeções Q, K e V leem as 768 dimensões da entrada.');
- case 5:case 7:return residualFigure(i===7);
- case 6:return flow([['768','entrada normalizada'],['3.072','Linear + GELU'],['768','Linear']])+`<details><summary>Ver a transformação GELU</summary><div class="formula">½x [1 + tanh(√(2/π) (x + 0,044715x³))]</div><p>Fórmula usada pela classe GELU em gpt.py. A curva é uma função matemática; as ativações desta execução não foram exportadas.</p></details>`+note('Duas projeções aprendíveis com bias. A expansão ocorre nas componentes, não na quantidade de tokens.');
- case 8:return `<div class="blocks">${Array.from({length:cfg.n_layers},(_,j)=>`<button data-block="${j}" aria-pressed="${j===block}"><small>TRANSFORMER</small>${String(j+1).padStart(2,'0')}<span>→</span></button>`).join('')}</div>`+status('block-info','')+note('Os 12 registros TransformerBlock do notebook têm saída (1, 4, 768). Selecionar um bloco identifica sua posição, não revela ativações.');
- case 10:return flow([['768','vetor por posição'],['Wᵀ','50.257 × 768 pesos'],['50.257','scores por posição']])+`<div class="output-shape">1 <span>sequência</span> × 4 <span>posições</span> × 50.257 <span>logits</span></div>`+note('Shape registrado na célula 15. A out_head não tem bias e não compartilha pesos com tok_emb nesta implementação. Não há logits numéricos deste contexto salvos.')+`<div class="probability"><div class="eyebrow">DE SCORES A PROBABILIDADES</div><div class="formula">pᵢ = exp(zᵢ) / Σⱼ exp(zⱼ)</div><p>Softmax converte os 50.257 logits de uma posição em probabilidades que somam 1. Cada entrada corresponde a um token do vocabulário, que pode ser apenas parte de uma palavra.</p><details><summary>Softmax é necessária para greedy?</summary><p>Não. Ela preserva a ordem dos scores: <code>argmax(z) = argmax(softmax(z))</code>. Por isso, o código local escolhe diretamente o maior logit. Na atenção, a softmax tem outro papel: normalizar os pesos entre posições permitidas.</p></details><details><summary>E a temperatura?</summary><p>Na amostragem, usa-se <code>softmax(z / τ)</code>, com τ &gt; 0. Temperaturas menores concentram a distribuição; maiores a espalham. Dividir por uma temperatura positiva não muda o argmax. O registro desta aula usa greedy, sem amostragem.</p></details></div>`;
- case 11:return flow([['Última posição','logits[:, −1, :]'],['argmax','ID de maior score'],['Anexar ID','novo contexto → modelo']])+`<div class="record-label">REPRODUÇÃO DO REGISTRO · SMALL · SEM TREINAMENTO</div><div id="generated-ids" class="generated-ids"></div><div class="generation-controls"><button id="back-round">← ID anterior</button><button id="next-round" class="primary">Revelar próximo ID →</button><button id="reset-round">Reiniciar</button></div>`+status('generation-info','')+`<details><summary>Ver texto completo decodificado no notebook</summary><blockquote>${esc(data.text)}</blockquote></details>`+note('A página não executa inferência. Esta é a continuação efetivamente salva na célula 18, não uma frase escolhida para a apresentação. Os IDs são anexados à sequência; o tokenizador decodifica a sequência para exibir texto. O código recalcula o contexto a cada rodada, recortando-o ao limite configurado se necessário.');
- }
+const content = window.GPTJourneyContent;
+const views = window.GPTJourneyViews;
+
+const state = { token: 3, group: 0, head: 0, block: 0, round: 0 };
+const byId = id => document.getElementById(id);
+const all = selector => [...document.querySelectorAll(selector)];
+
+function renderModelMap() {
+  byId('model-map').innerHTML = Array.from(
+    { length: data.config.n_layers },
+    (_, blockIndex) => `
+      <a href="#s8" data-map-block="${blockIndex}"
+         aria-label="Explorar bloco ${blockIndex + 1}" style="--i:${blockIndex}">
+        <span>${String(blockIndex + 1).padStart(2, '0')}</span>
+        ${Array.from({ length: data.config.n_heads }, () => '<i></i>').join('')}
+      </a>`,
+  ).join('');
 }
-$('model-map').innerHTML=Array.from({length:12},(_,i)=>`<a href="#s8" data-map-block="${i}" aria-label="Explorar bloco ${i+1}" style="--i:${i}"><span>${String(i+1).padStart(2,'0')}</span>${Array.from({length:12},()=>'<i></i>').join('')}</a>`).join('');
-$('journey').innerHTML=steps.map((s,i)=>`<section class="chapter" id="s${i}" aria-labelledby="title-${i}"><div class="chapter-copy"><div class="eyebrow">${String(i+1).padStart(2,'0')} / ${s[0]}</div><h2 id="title-${i}">${s[1]}</h2><p>${s[2]}</p><div class="shape"><span>ENTRA</span><code>${esc(s[3])}</code><span>SAI</span><code>${esc(s[4])}</code></div><details class="source-code"><summary>Ver código original ↗</summary><p>${i===0?'chapter4_visual_lesson.ipynb · célula 15':'gpt.py · '+s[5]}</p><pre><code>${esc(i===0?data.records['15'].code.split('logs =')[0]:data.code[s[5]])}</code></pre></details></div><div class="chapter-figure"><div class="figure-heading">${[0,11].includes(i)?'REGISTRO DO NOTEBOOK':'ESTRUTURA DO CÓDIGO'}<span>${i===11?'10 NOVOS IDs':'GPT-2 SMALL'}</span></div>${figure(i)}</div><a class="bridge" href="${i<11?'#s'+(i+1):'#learning'}"><span>↓</span> ${s[6]}</a></section>`).join('');
 
-const basicSteps = [
- {title:'Preparando o texto', subtitle:'Tokenização e embeddings', range:[0,3], description:'O modelo trabalha com números. Primeiro, o tokenizador transforma o texto em IDs. Cada ID busca um vetor de 768 componentes; depois, o modelo soma a ele um vetor de posição para representar a ordem dos tokens.', visual:flow([['Texto → IDs','Hello, I am → 4 tokens'],['IDs → vetores','768 componentes por token'],['+ posição','identidade e ordem juntas']]), takeaway:'Saída: quatro vetores de 768 componentes, prontos para entrar no primeiro Transformer.', detail:'Operações 01–03 · tokenização, embedding e posição'},
- {title:'O bloco Transformer', subtitle:'O coração do modelo', range:[3,9], description:'Os vetores passam por 12 blocos. Em cada um, a atenção combina informação da própria posição e das anteriores; a rede feed-forward transforma cada vetor. Normalizações ajudam a controlar a escala dos valores, e atalhos somam a entrada às atualizações.', visual:flow([['Atenção causal','relaciona posições permitidas'],['Feed-forward + GELU','768 → 3.072 → 768'],['Repetir ×12','mesma estrutura, pesos próprios']]), takeaway:'A ordem dentro de cada bloco: normalizar → atenção → somar atalho → normalizar → feed-forward → somar atalho. Entram e saem quatro vetores de 768 componentes; seu conteúdo muda.', detail:'Operações 04–09 · normalização, atenção, atalhos, GELU e pilha'},
- {title:'A camada final de saída e os logits', subtitle:'Uma pontuação para cada token possível', range:[9,11], description:'Depois dos 12 blocos, uma última normalização prepara os vetores. A camada de saída projeta cada vetor de 768 componentes em 50.257 pontuações — uma para cada token do vocabulário. Essas pontuações brutas são os logits.', visual:flow([['768','componentes por posição'],['Norm final → saída','projeção sobre o vocabulário'],['50.257','logits por posição']]), takeaway:'Logits ainda não são probabilidades. O modelo produz essas pontuações para todas as posições; para continuar a frase, usamos apenas a última.', detail:'Operações 10–11 · normalização final e projeção de saída'},
- {title:'Escolhendo o próximo token e repetindo', subtitle:'Greedy decoding', range:[11,12], description:'A softmax transforma os logits da última posição em probabilidades que somam 100%. No modo greedy, escolhemos o token de maior pontuação, anexamos seu ID ao contexto e repetimos o processo. O tokenizador converte os IDs de volta em texto.', visual:flow([['Última posição','logits → probabilidades'],['Escolher o maior','argmax → ID'],['Anexar e repetir','o contexto ganha um token']]), takeaway:'No código da aula, argmax é aplicado diretamente aos logits: a softmax preserva a ordem e não altera essa escolha. A continuação real salva no notebook está no detalhe avançado abaixo.', detail:'Operação 12 · percorrer a geração registrada, ID por ID'}
-];
-const advancedSections=[...document.querySelectorAll('.chapter')];
-const tokenControl='<label class="advanced-token">Acompanhar token <select id="token"><option value="0">Hello · 15496</option><option value="1">, · 11</option><option value="2">␠I · 314</option><option value="3" selected>␠am · 716</option></select></label>';
-$('journey').innerHTML=basicSteps.map((step,i)=>`<section class="basic-step" id="step${i+1}" aria-labelledby="basic-title-${i}"><div class="basic-heading"><span class="step-number">0${i+1}</span><div><div class="eyebrow">PASSO ${i+1} / ${step.subtitle}</div><h2 id="basic-title-${i}">${step.title}</h2></div></div><p class="basic-description">${step.description}</p><div class="basic-visual">${step.visual}</div><p class="takeaway">${step.takeaway}</p><details class="advanced" id="advanced${i+1}"><summary><span>Avançado <small>${step.detail}</small></span><span class="expand-hint" aria-hidden="true">+</span></summary><div class="advanced-body">${i===0?tokenControl+'<p class="shape-guide">Como ler as formas: <code>(B, T, D)</code> = sequências, tokens e componentes. Neste registro: <code>(1, 4, 768)</code>.</p>':''}${advancedSections.slice(...step.range).map(el=>el.outerHTML).join('')}</div></details><a class="basic-next" href="${i<3?'#step'+(i+2):'#learning'}">${i<3?'Próximo: passo '+(i+2):'Por que o modelo ainda gera texto sem sentido?'} <span>↓</span></a></section>`).join('');
-$('index').innerHTML=basicSteps.map((step,i)=>`<a href="#step${i+1}"><span>0${i+1}</span>${step.title}</a>`).join('');
-// Keep existing operation links usable even when their advanced group is closed.
-function revealTarget(hash){const el=document.getElementById(hash.slice(1));if(!el)return;const advanced=el.closest('details.advanced');if(advanced)advanced.open=true;requestAnimationFrame(()=>el.scrollIntoView({block:'start'}));}
-document.addEventListener('click',e=>{const link=e.target.closest('a[href^="#s"]');if(link){e.preventDefault();const hash=link.getAttribute('href');history.replaceState(null,'',hash);revealTarget(hash);}});
-addEventListener('hashchange',()=>revealTarget(location.hash));
-if(location.hash)requestAnimationFrame(()=>revealTarget(location.hash));
-document.querySelectorAll('.advanced').forEach(el=>el.addEventListener('toggle',()=>reading()));
-$('source-records').innerHTML=Object.values(data.records).map(r=>`<details><summary>Célula ${r.cell} · ${r.cell===4?'Parâmetros':r.cell===8?'Famílias GPT-2':r.cell===15?'Tokenização e shapes':'Geração registrada'}</summary><pre>${esc(r.output)}</pre><details><summary>Código da célula</summary><pre>${esc(r.code)}</pre></details></details>`).join('');
-function updateToken(){document.querySelectorAll('[data-token]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.token)===token));$('token').value=token;$('token-info').textContent=`Selecionado: ${labels[token]} → ID ${data.ids[token]} → posição ${token}.`;document.querySelector('.chosen-id').textContent=data.ids[token];$('position-info').textContent=`E[${data.ids[token]}, d] + P[${token}, d] → x[${token}, d].`;updateDimensions();}
-function updateDimensions(){document.querySelectorAll('[data-group]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.group)===group));$('dimension-grid').innerHTML=Array.from({length:64},(_,i)=>`<button data-dim="${group*64+i}" aria-label="Inspecionar dimensão ${group*64+i}">${group*64+i}</button>`).join('');$('dimension-info').textContent=`E[${data.ids[token]}, ${group*64}:${group*64+64}] · 64 componentes. Valores não exportados.`;}
-function updateBlock(){document.querySelectorAll('[data-block]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.block)===block));$('block-info').textContent=`Bloco ${block+1}: recebe ${block===0?'os embeddings somados':'a saída do bloco '+block} e entrega (1, 4, 768) ${block===11?'à LayerNorm final':'ao bloco '+(block+2)}.`;}
-function updateRound(){const ids=data.generated.slice(0,4+round);$('generated-ids').innerHTML=ids.map((id,i)=>`<span class="${i>=4?'new-id':''}"><small>${i<4?'CONTEXTO':'+'+(i-3)}</small>${id}</span>`).join('');$('generation-info').textContent=round===0?'4 IDs iniciais. Revele a primeira escolha salva do argmax.':`Rodada ${round} de 10 · ID ${ids.at(-1)} anexado · contexto com ${ids.length} tokens. ${round===10?'Fim do registro.':'A próxima rodada recebe esse contexto ampliado.'}`;$('back-round').disabled=round===0;$('next-round').disabled=round===10;}
-$('token').addEventListener('change',e=>{token=Number(e.target.value);updateToken();});
-$('head').addEventListener('change',e=>{head=Number(e.target.value);$('attention-info').textContent=`Cabeça ${head+1}: componentes ${head*64}–${head*64+63} das projeções Q/K/V. A máscara é igual nas 12 cabeças; os pesos de atenção não foram exportados.`;});
-document.addEventListener('click',e=>{const map=e.target.closest('[data-map-block]');if(map){block=Number(map.dataset.mapBlock);updateBlock();}const b=e.target.closest('button');if(b){if(b.dataset.token!==undefined){token=Number(b.dataset.token);updateToken();}if(b.dataset.group!==undefined){group=Number(b.dataset.group);updateDimensions();}if(b.dataset.dim!==undefined){document.querySelectorAll('[data-dim]').forEach(x=>x.setAttribute('aria-pressed',x===b));$('dimension-info').textContent=`E[${data.ids[token]}, ${b.dataset.dim}] · um peso da tabela. Valor não exportado.`;}if(b.dataset.cell!==undefined){const [q,k]=b.dataset.cell.split(',').map(Number);document.querySelectorAll('[data-cell]').forEach(x=>x.setAttribute('aria-pressed',x===b));$('attention-info').textContent=`Cabeça ${head+1} · query ${q} (${labels[q]}) → key ${k} (${labels[k]}): ${k>q?'futuro bloqueado; score recebe −∞ e peso após softmax é zero.':'conexão permitida; score = Q · K / √64. Valor não exportado.'}`;}if(b.dataset.block!==undefined){block=Number(b.dataset.block);updateBlock();}if(b.id==='next-round'){round=Math.min(10,round+1);updateRound();}if(b.id==='back-round'){round=Math.max(0,round-1);updateRound();}if(b.id==='reset-round'){round=0;updateRound();}}if(e.target.closest('#index a'))document.querySelector('.index').open=false;});
-updateToken();updateBlock();updateRound();
-const chapters=[...document.querySelectorAll('.chapter')];
-const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting)entry.target.classList.add('seen');}),{threshold:.08});chapters.forEach(c=>observer.observe(c));
-let pending=false;
-function reading(){let current=0;document.querySelectorAll('.basic-step').forEach((el,i)=>{if(el.getBoundingClientRect().top<innerHeight*.45)current=i;});const learningVisible=$('learning').getBoundingClientRect().top<innerHeight*.45;$('reading-label').textContent=learningVisible?'O papel do treinamento':'Passo '+(current+1)+' / '+basicSteps[current].title;document.querySelectorAll('#index a').forEach((a,i)=>{if(i===current&&!learningVisible)a.setAttribute('aria-current','step');else a.removeAttribute('aria-current');});$('reading-progress').style.width=((current+1)/4*100)+'%';pending=false;}
-addEventListener('scroll',()=>{if(!pending){pending=true;requestAnimationFrame(reading);}},{passive:true});reading();
+function renderJourney() {
+  const detailedChapters = content.detailedSteps.map((step, index) =>
+    views.renderDetailedChapter(step, index, state, data),
+  );
 
-const learningModes = {
- inference: {items:[['Contexto','tokens já disponíveis'],['Forward','pesos fixos'],['Próximo ID','anexar e repetir']], text:'Gerar usa os parâmetros existentes. Não há cálculo de gradientes nem atualização dos pesos em generate_text_simple. Esta página reproduz os IDs salvos, sem rodar o modelo.'},
- training: {items:[['Texto + alvos','próximo token real'],['Forward + perda','avaliar a previsão'],['Backward + otimizador','atualizar parâmetros']], text:'No pré-treinamento, a entropia cruzada penaliza previsões ruins para o token alvo. Backpropagation calcula os gradientes; o otimizador ajusta os parâmetros. Repetir isso em muitos textos ensina regularidades da linguagem. Este fluxo é conceitual: não há treino executado ou métricas de perda neste registro.'}
-};
-function updateLearning(mode){const selected=learningModes[mode];document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===mode));$('learning-flow').innerHTML=flow(selected.items)+`<p>${selected.text}</p>`;}
-document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>updateLearning(b.dataset.mode)));
+  byId('journey').innerHTML = content.basicSteps
+    .map((step, index) => views.renderBasicStep(step, index, detailedChapters))
+    .join('');
+
+  byId('index').innerHTML = content.basicSteps
+    .map(
+      (step, index) => `
+        <a href="#step${index + 1}">
+          <span>0${index + 1}</span>${step.title}
+        </a>`,
+    )
+    .join('');
+}
+
+function renderSourceRecords() {
+  const recordNames = {
+    4: 'Parâmetros',
+    8: 'Famílias GPT-2',
+    15: 'Tokenização e shapes',
+    18: 'Geração registrada',
+  };
+
+  byId('source-records').innerHTML = Object.values(data.records)
+    .map(
+      record => `
+        <details>
+          <summary>Célula ${record.cell} · ${recordNames[record.cell]}</summary>
+          <pre>${views.escapeHtml(record.output)}</pre>
+          <details>
+            <summary>Código da célula</summary>
+            <pre>${views.escapeHtml(record.code)}</pre>
+          </details>
+        </details>`,
+    )
+    .join('');
+}
+
+function updateToken() {
+  all('[data-token]').forEach(button => {
+    button.setAttribute('aria-pressed', Number(button.dataset.token) === state.token);
+  });
+
+  byId('token').value = state.token;
+  byId('token-info').textContent =
+    `Selecionado: ${views.TOKEN_LABELS[state.token]} → ` +
+    `ID ${data.ids[state.token]} → posição ${state.token}.`;
+  document.querySelector('.chosen-id').textContent = data.ids[state.token];
+  byId('position-info').textContent =
+    `E[${data.ids[state.token]}, d] + P[${state.token}, d] → x[${state.token}, d].`;
+
+  updateDimensions();
+}
+
+function updateDimensions() {
+  all('[data-group]').forEach(button => {
+    button.setAttribute('aria-pressed', Number(button.dataset.group) === state.group);
+  });
+
+  const firstDimension = state.group * 64;
+  byId('dimension-grid').innerHTML = Array.from({ length: 64 }, (_, offset) => {
+    const dimension = firstDimension + offset;
+    return `
+      <button data-dim="${dimension}" aria-label="Inspecionar dimensão ${dimension}">
+        ${dimension}
+      </button>`;
+  }).join('');
+
+  byId('dimension-info').textContent =
+    `E[${data.ids[state.token]}, ${firstDimension}:${firstDimension + 64}] · ` +
+    '64 componentes. Valores não exportados.';
+}
+
+function updateBlock() {
+  all('[data-block]').forEach(button => {
+    button.setAttribute('aria-pressed', Number(button.dataset.block) === state.block);
+  });
+
+  const input = state.block === 0 ? 'os embeddings somados' : `a saída do bloco ${state.block}`;
+  const output =
+    state.block === data.config.n_layers - 1
+      ? 'à LayerNorm final'
+      : `ao bloco ${state.block + 2}`;
+
+  byId('block-info').textContent =
+    `Bloco ${state.block + 1}: recebe ${input} e entrega (1, 4, 768) ${output}.`;
+}
+
+function updateGeneration() {
+  const ids = data.generated.slice(0, data.ids.length + state.round);
+
+  byId('generated-ids').innerHTML = ids
+    .map((id, index) => {
+      const isNew = index >= data.ids.length;
+      const label = isNew ? `+${index - data.ids.length + 1}` : 'CONTEXTO';
+      return `<span class="${isNew ? 'new-id' : ''}"><small>${label}</small>${id}</span>`;
+    })
+    .join('');
+
+  if (state.round === 0) {
+    byId('generation-info').textContent =
+      '4 IDs iniciais. Revele a primeira escolha salva do argmax.';
+  } else {
+    const isComplete = state.round === 10;
+    byId('generation-info').textContent =
+      `Rodada ${state.round} de 10 · ID ${ids.at(-1)} anexado · ` +
+      `contexto com ${ids.length} tokens. ` +
+      (isComplete ? 'Fim do registro.' : 'A próxima rodada recebe esse contexto ampliado.');
+  }
+
+  byId('back-round').disabled = state.round === 0;
+  byId('next-round').disabled = state.round === 10;
+}
+
+function updateAttention(query, key) {
+  all('[data-cell]').forEach(button => {
+    button.setAttribute('aria-pressed', button.dataset.cell === `${query},${key}`);
+  });
+
+  const result =
+    key > query
+      ? 'futuro bloqueado; score recebe −∞ e peso após softmax é zero.'
+      : 'conexão permitida; score = Q · K / √64. Valor não exportado.';
+
+  byId('attention-info').textContent =
+    `Cabeça ${state.head + 1} · query ${query} (${views.TOKEN_LABELS[query]}) → ` +
+    `key ${key} (${views.TOKEN_LABELS[key]}): ${result}`;
+}
+
+function updateLearning(mode) {
+  const selected = content.learningModes[mode];
+  all('[data-mode]').forEach(button => {
+    button.setAttribute('aria-pressed', button.dataset.mode === mode);
+  });
+  byId('learning-flow').innerHTML = `${views.flow(selected.items)}<p>${selected.text}</p>`;
+}
+
+function revealDetailedOperation(hash) {
+  const target = document.getElementById(hash.slice(1));
+  if (!target) return;
+
+  const advancedSection = target.closest('details.advanced');
+  if (advancedSection) advancedSection.open = true;
+  requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
+}
+
+function handleButtonClick(button) {
+  if (button.dataset.token !== undefined) {
+    state.token = Number(button.dataset.token);
+    updateToken();
+  }
+  if (button.dataset.group !== undefined) {
+    state.group = Number(button.dataset.group);
+    updateDimensions();
+  }
+  if (button.dataset.dim !== undefined) {
+    all('[data-dim]').forEach(item => item.setAttribute('aria-pressed', item === button));
+    byId('dimension-info').textContent =
+      `E[${data.ids[state.token]}, ${button.dataset.dim}] · ` +
+      'um peso da tabela. Valor não exportado.';
+  }
+  if (button.dataset.cell !== undefined) {
+    const [query, key] = button.dataset.cell.split(',').map(Number);
+    updateAttention(query, key);
+  }
+  if (button.dataset.block !== undefined) {
+    state.block = Number(button.dataset.block);
+    updateBlock();
+  }
+  if (button.dataset.mode !== undefined) updateLearning(button.dataset.mode);
+
+  if (button.id === 'next-round') {
+    state.round = Math.min(10, state.round + 1);
+    updateGeneration();
+  }
+  if (button.id === 'back-round') {
+    state.round = Math.max(0, state.round - 1);
+    updateGeneration();
+  }
+  if (button.id === 'reset-round') {
+    state.round = 0;
+    updateGeneration();
+  }
+}
+
+function handleDocumentClick(event) {
+  const mapBlock = event.target.closest('[data-map-block]');
+  if (mapBlock) {
+    state.block = Number(mapBlock.dataset.mapBlock);
+    updateBlock();
+  }
+
+  const operationLink = event.target.closest('a[href^="#s"]');
+  if (operationLink) {
+    event.preventDefault();
+    const hash = operationLink.getAttribute('href');
+    history.replaceState(null, '', hash);
+    revealDetailedOperation(hash);
+  }
+
+  const button = event.target.closest('button');
+  if (button) handleButtonClick(button);
+  if (event.target.closest('#index a')) document.querySelector('.index').open = false;
+}
+
+let scrollUpdatePending = false;
+
+function updateReadingProgress() {
+  let currentStep = 0;
+  all('.basic-step').forEach((element, index) => {
+    if (element.getBoundingClientRect().top < innerHeight * 0.45) currentStep = index;
+  });
+
+  const learningIsVisible = byId('learning').getBoundingClientRect().top < innerHeight * 0.45;
+  byId('reading-label').textContent = learningIsVisible
+    ? 'O papel do treinamento'
+    : `Passo ${currentStep + 1} / ${content.basicSteps[currentStep].title}`;
+
+  all('#index a').forEach((link, index) => {
+    if (index === currentStep && !learningIsVisible) link.setAttribute('aria-current', 'step');
+    else link.removeAttribute('aria-current');
+  });
+
+  byId('reading-progress').style.width = `${((currentStep + 1) / 4) * 100}%`;
+  scrollUpdatePending = false;
+}
+
+function bindEvents() {
+  byId('token').addEventListener('change', event => {
+    state.token = Number(event.target.value);
+    updateToken();
+  });
+
+  byId('head').addEventListener('change', event => {
+    state.head = Number(event.target.value);
+    byId('attention-info').textContent =
+      `Cabeça ${state.head + 1}: componentes ${state.head * 64}–${state.head * 64 + 63} ` +
+      'das projeções Q/K/V. A máscara é igual nas 12 cabeças; ' +
+      'os pesos de atenção não foram exportados.';
+  });
+
+  document.addEventListener('click', handleDocumentClick);
+  addEventListener('hashchange', () => revealDetailedOperation(location.hash));
+  addEventListener(
+    'scroll',
+    () => {
+      if (scrollUpdatePending) return;
+      scrollUpdatePending = true;
+      requestAnimationFrame(updateReadingProgress);
+    },
+    { passive: true },
+  );
+
+  all('.advanced').forEach(section => {
+    section.addEventListener('toggle', updateReadingProgress);
+  });
+}
+
+function observeChapters() {
+  const observer = new IntersectionObserver(
+    entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) entry.target.classList.add('seen');
+      });
+    },
+    { threshold: 0.08 },
+  );
+  all('.chapter').forEach(chapter => observer.observe(chapter));
+}
+
+renderModelMap();
+renderJourney();
+renderSourceRecords();
+bindEvents();
+observeChapters();
+
+updateToken();
+updateBlock();
+updateGeneration();
 updateLearning('inference');
-$('parameter-note').textContent='O notebook registra 163.009.536 parâmetros: 38.597.376 na tabela de tokens e outros 38.597.376 na saída. Sem contar a matriz de saída separadamente, o registro chega a 124.412.160 — aproximadamente 124M.';
+updateReadingProgress();
+
+byId('parameter-note').textContent =
+  'O notebook registra 163.009.536 parâmetros: 38.597.376 na tabela de tokens ' +
+  'e outros 38.597.376 na saída. Sem contar a matriz de saída separadamente, ' +
+  'o registro chega a 124.412.160 — aproximadamente 124M.';
+
+if (location.hash) requestAnimationFrame(() => revealDetailedOperation(location.hash));

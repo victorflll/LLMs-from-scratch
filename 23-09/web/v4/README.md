@@ -6,7 +6,18 @@ Cinco momentos organizam a leitura: representar, contextualizar, pontuar, contin
 
 As explicações novas ficam junto da operação correspondente: normalização, residual, GELU, softmax, greedy e temperatura. O fechamento compara geração e treinamento. Não há pesos, logits, probabilidades ou inferências inventados.
 
-Abra `index.html` com os três arquivos `gpt_journey*` na mesma pasta. Os links de origem pressupõem esta pasta em `23-09/web/v4/`.
+Abra `index.html` mantendo os arquivos da versão na mesma pasta. Os links de origem pressupõem esta pasta em `23-09/web/v4/`.
+
+## Estrutura do código
+
+- `index.html` contém somente a estrutura permanente da página.
+- `content.js` reúne os textos e a configuração dos quatro passos e das 12 operações.
+- `views.js` contém os templates das figuras e seções.
+- `gpt_journey.js` mantém o estado, os eventos e as atualizações da interface.
+- `gpt_journey_data.js` é o snapshot exportado do notebook.
+- `gpt_journey.css` organiza os estilos por região, com formatação legível e comentários de seção.
+
+Os arquivos usam scripts tradicionais em ordem explícita para continuar funcionando ao abrir a página localmente, sem bundler ou etapa de build.
 
 O snapshot de dados foi preservado da v3 e conferido com `lesson/chapter4_visual_lesson.ipynb` e `lesson/gpt.py`. O exportador existente ainda atende sua versão anterior; para atualizar a v4 é necessário revisar e copiar o snapshot após a exportação.
 
