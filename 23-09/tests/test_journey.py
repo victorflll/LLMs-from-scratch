@@ -5,10 +5,11 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+DATA_PATH = ROOT / 'web/shared/gpt_journey_data.js'
 
 class JourneyDataTests(unittest.TestCase):
     def test_export_matches_notebook(self):
-        raw = (ROOT / 'web/v2/gpt_journey_data.js').read_text()
+        raw = DATA_PATH.read_text()
         data = json.loads(raw.removeprefix('window.JOURNEY_DATA = ').removesuffix(';\n'))
         notebook = json.loads((ROOT / data['source']).read_text())
         self.assertEqual(data['sha256'], hashlib.sha256((ROOT / data['source']).read_bytes()).hexdigest())
@@ -20,6 +21,13 @@ class JourneyDataTests(unittest.TestCase):
         self.assertEqual(len(data['generated']) - len(data['ids']), 10)
         self.assertEqual(data['records']['15']['output'].count('TransformerBlock'), data['config']['n_layers'])
         self.assertIn('(1, 4, 50257)', data['records']['15']['output'])
+
+    def test_journeys_use_the_shared_snapshot(self):
+        expected_src = '../shared/gpt_journey_data.js'
+        for version in ('v3', 'v4'):
+            html = (ROOT / f'web/{version}/index.html').read_text()
+            self.assertIn(f'src="{expected_src}"', html)
+            self.assertFalse((ROOT / f'web/{version}/gpt_journey_data.js').exists())
 
 if __name__ == '__main__':
     unittest.main()

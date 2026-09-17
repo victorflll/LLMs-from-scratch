@@ -21,10 +21,11 @@ Funciona offline; abra o HTML no navegador mantendo a estrutura de pastas.
 │   └── tests.py             # Teste original do modelo
 ├── web/
 │   ├── v4/                 # Jornada integrada atual
-│   ├── v3/                 # Jornada anterior e dados exportados
+│   ├── v3/                 # Jornada contínua anterior
 │   ├── v2/                 # Versão anterior
 │   ├── v1/                 # Mini-GPT didático
-│   └── original/           # Primeiro diagrama
+│   ├── original/           # Primeiro diagrama
+│   └── shared/             # Snapshot do notebook usado por v3 e v4
 ├── scripts/
 │   └── export_journey.py
 └── tests/
@@ -61,8 +62,10 @@ Comandos a partir da raiz do repositório:
 python3 23-09/scripts/export_journey.py
 python3 23-09/tests/test_journey.py
 node 23-09/tests/test_gpt_arch.cjs
-node --check 23-09/web/v2/gpt_journey.js
+node --check 23-09/web/v3/gpt_journey.js
+node --check 23-09/web/v4/gpt_journey.js
 ```
 
 O exportador lê os registros de `lesson/chapter4_visual_lesson.ipynb` e o código de
-`lesson/gpt.py`, gravando `web/v2/gpt_journey_data.js`. Ele não executa inferência.
+`lesson/gpt.py`, gravando `web/shared/gpt_journey_data.js`. V3 e v4 carregam esse
+mesmo snapshot; o exportador não executa inferência.

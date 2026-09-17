@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+OUTPUT = ROOT / 'web/shared/gpt_journey_data.js'
 
 def export():
     path = ROOT / 'lesson/chapter4_visual_lesson.ipynb'
@@ -29,7 +30,12 @@ def export():
                'ids': ids, 'generated': generated,
                'text': records['18']['output'].split('Texto:')[1].strip(),
                'records': records, 'code': code, 'config': config}
-    (ROOT / 'web/v2/gpt_journey_data.js').write_text('window.JOURNEY_DATA = ' + json.dumps(payload, ensure_ascii=False, indent=2) + ';\n')
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(
+        'window.JOURNEY_DATA = '
+        + json.dumps(payload, ensure_ascii=False, indent=2)
+        + ';\n'
+    )
     return payload
 
 if __name__ == '__main__':

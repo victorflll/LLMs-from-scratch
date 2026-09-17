@@ -14,12 +14,12 @@ Abra `index.html` mantendo os arquivos da versão na mesma pasta. Os links de or
 - `content.js` reúne os textos e a configuração dos quatro passos e das 12 operações.
 - `views.js` contém os templates das figuras e seções.
 - `gpt_journey.js` mantém o estado, os eventos e as atualizações da interface.
-- `gpt_journey_data.js` é o snapshot exportado do notebook.
+- `../shared/gpt_journey_data.js` é o snapshot exportado do notebook e compartilhado com a v3.
 - `gpt_journey.css` organiza os estilos por região, com formatação legível e comentários de seção.
 
 Os arquivos usam scripts tradicionais em ordem explícita para continuar funcionando ao abrir a página localmente, sem bundler ou etapa de build.
 
-O snapshot de dados foi preservado da v3 e conferido com `lesson/chapter4_visual_lesson.ipynb` e `lesson/gpt.py`. O exportador existente ainda atende sua versão anterior; para atualizar a v4 é necessário revisar e copiar o snapshot após a exportação.
+O exportador lê `lesson/chapter4_visual_lesson.ipynb` e `lesson/gpt.py` e atualiza o snapshot compartilhado. Executar `python3 23-09/scripts/export_journey.py` é suficiente para atualizar v3 e v4; não há cópias por versão.
 
 Referência: https://github.com/rasbt/LLMs-from-scratch/blob/main/ch04/01_main-chapter-code/gpt.py
 

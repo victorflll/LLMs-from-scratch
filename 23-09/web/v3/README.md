@@ -1,7 +1,7 @@
 # GPT por dentro — jornada contínua
 
 Abra `index.html`. Funciona offline com `gpt_journey.css`,
-`gpt_journey.js` e `gpt_journey_data.js` na mesma pasta.
+`gpt_journey.js` e o snapshot compartilhado em `../shared/gpt_journey_data.js`.
 
 A leitura agora percorre as 12 operações em uma página contínua. O índice fixo
 permite saltar para qualquer operação; o token selecionado acompanha a consulta
@@ -29,11 +29,12 @@ Após salvar novas saídas compatíveis no notebook:
 ```sh
 python3 23-09/scripts/export_journey.py
 python3 23-09/tests/test_journey.py
-node --check 23-09/web/v2/gpt_journey.js
+node --check 23-09/web/v3/gpt_journey.js
 ```
 
 O exportador usa somente a biblioteca padrão do Python, inclui o SHA-256 do
-notebook e copia literalmente as saídas e os trechos de código. Alterações na
+notebook e grava `web/shared/gpt_journey_data.js`, consumido pela v3 e pela v4.
+Ele copia literalmente as saídas e os trechos de código. Alterações na
 estrutura/configuração do notebook exigem revisar também os textos da jornada.
 
 ## Validação
