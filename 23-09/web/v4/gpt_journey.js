@@ -217,7 +217,7 @@ function handleDocumentClick(event) {
   }
 
   const operationLink = event.target.closest('a[href^="#s"]');
-  if (operationLink) {
+  if (operationLink && /^#s\d+$/.test(operationLink.getAttribute('href'))) {
     event.preventDefault();
     const hash = operationLink.getAttribute('href');
     history.replaceState(null, '', hash);

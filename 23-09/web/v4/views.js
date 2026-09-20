@@ -1,7 +1,7 @@
 'use strict';
 
 window.GPTJourneyViews = (() => {
-  const TOKEN_LABELS = ['Hello', ',', '␠I', '␠am'];
+  const TOKEN_LABELS = ['Hello', ',', '␣I', '␣am'];
 
   function escapeHtml(value) {
     return String(value).replace(
@@ -162,7 +162,7 @@ window.GPTJourneyViews = (() => {
               .join('')}
           </div>
           ${status('token-info', `Selecionado: ${TOKEN_LABELS[token]} → ID ${data.ids[token]} → posição ${token}.`)}
-          ${note('Tokenização registrada · célula 15 do notebook. ␠ indica um espaço inicial.')}
+          ${note('Tokenização registrada · célula 15 do notebook. ␣ indica um espaço inicial — no GPT-2, o espaço faz parte do token (IDs 314 e 716 são “ I” e “ am”).')}
         `;
       case 1:
         return `
@@ -308,8 +308,8 @@ window.GPTJourneyViews = (() => {
         <select id="token">
           <option value="0">Hello · 15496</option>
           <option value="1">, · 11</option>
-          <option value="2">␠I · 314</option>
-          <option value="3" selected>␠am · 716</option>
+          <option value="2">␣I · 314</option>
+          <option value="3" selected>␣am · 716</option>
         </select>
       </label>
       <p class="shape-guide">

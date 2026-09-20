@@ -3,6 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Jornada interativa pela arquitetura GPT-2: o caminho de um token, do texto aos logits, com dados reais do notebook do capítulo 4."
+    />
+    <meta name="theme-color" content="#07090d" />
     <title>GPT por dentro — v4 · do texto à próxima previsão</title>
     <link rel="stylesheet" href="gpt_journey.css" />
   </head>
@@ -79,8 +84,8 @@
         <p>
           O alvo é o token seguinte na sequência original. Nos IDs já registrados,
           a posição de <code>Hello</code> tem como próximo alvo <code>,</code>; a
-          vírgula tem <code>␠I</code>; e <code>␠I</code> tem <code>␠am</code>.
-          O alvo após <code>␠am</code> exigiria a continuação do texto de treino.
+          vírgula tem <code>␣I</code>; e <code>␣I</code> tem <code>␣am</code>.
+          O alvo após <code>␣am</code> exigiria a continuação do texto de treino.
         </p>
         <p>
           É possível calcular a perda de várias posições no mesmo forward. A máscara
