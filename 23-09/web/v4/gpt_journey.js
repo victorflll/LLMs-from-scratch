@@ -3,6 +3,7 @@
 const data = window.JOURNEY_DATA;
 const content = window.GPTJourneyContent;
 const views = window.GPTJourneyViews;
+const t = window.t;
 
 const state = { token: 3, group: 0, head: 0, block: 0, round: 0 };
 const byId = id => document.getElementById(id);
@@ -13,7 +14,7 @@ function renderModelMap() {
     { length: data.config.n_layers },
     (_, blockIndex) => `
       <a href="#s8" data-map-block="${blockIndex}"
-         aria-label="Explorar bloco ${blockIndex + 1}" style="--i:${blockIndex}">
+         aria-label="${t.mapBlockAria(blockIndex + 1)}" style="--i:${blockIndex}">
         <span>${String(blockIndex + 1).padStart(2, '0')}</span>
         ${Array.from({ length: data.config.n_heads }, () => '<i></i>').join('')}
       </a>`,
@@ -40,21 +41,14 @@ function renderJourney() {
 }
 
 function renderSourceRecords() {
-  const recordNames = {
-    4: 'Parâmetros',
-    8: 'Famílias GPT-2',
-    15: 'Tokenização e shapes',
-    18: 'Geração registrada',
-  };
-
   byId('source-records').innerHTML = Object.values(data.records)
     .map(
       record => `
         <details>
-          <summary>Célula ${record.cell} · ${recordNames[record.cell]}</summary>
+          <summary>${t.cellLabel(record.cell, t.recordNames[record.cell])}</summary>
           <pre>${views.escapeHtml(record.output)}</pre>
           <details>
-            <summary>Código da célula</summary>
+            <summary>${t.cellCode}</summary>
             <pre>${views.escapeHtml(record.code)}</pre>
           </details>
         </details>`,
@@ -68,12 +62,16 @@ function updateToken() {
   });
 
   byId('token').value = state.token;
-  byId('token-info').textContent =
-    `Selecionado: ${views.TOKEN_LABELS[state.token]} → ` +
-    `ID ${data.ids[state.token]} → posição ${state.token}.`;
+  byId('token-info').textContent = t.tokInfo(
+    views.TOKEN_LABELS[state.token],
+    data.ids[state.token],
+    state.token,
+  );
   document.querySelector('.chosen-id').textContent = data.ids[state.token];
-  byId('position-info').textContent =
-    `E[${data.ids[state.token]}, d] + P[${state.token}, d] → x[${state.token}, d].`;
+  byId('position-info').textContent = t.positionInfoArrow(
+    data.ids[state.token],
+    state.token,
+  );
 
   updateDimensions();
 }
@@ -87,14 +85,16 @@ function updateDimensions() {
   byId('dimension-grid').innerHTML = Array.from({ length: 64 }, (_, offset) => {
     const dimension = firstDimension + offset;
     return `
-      <button data-dim="${dimension}" aria-label="Inspecionar dimensão ${dimension}">
+      <button data-dim="${dimension}" aria-label="${t.dimInspectAria(dimension)}">
         ${dimension}
       </button>`;
   }).join('');
 
-  byId('dimension-info').textContent =
-    `E[${data.ids[state.token]}, ${firstDimension}:${firstDimension + 64}] · ` +
-    '64 componentes. Valores não exportados.';
+  byId('dimension-info').textContent = t.dimGroupInfo(
+    data.ids[state.token],
+    firstDimension,
+    firstDimension + 64,
+  );
 }
 
 function updateBlock() {
@@ -102,14 +102,14 @@ function updateBlock() {
     button.setAttribute('aria-pressed', Number(button.dataset.block) === state.block);
   });
 
-  const input = state.block === 0 ? 'os embeddings somados' : `a saída do bloco ${state.block}`;
+  const input =
+    state.block === 0 ? t.blockInputFirst : t.blockInputPrev(state.block);
   const output =
     state.block === data.config.n_layers - 1
-      ? 'à LayerNorm final'
-      : `ao bloco ${state.block + 2}`;
+      ? t.blockOutputFinal
+      : t.blockOutputNext(state.block + 2);
 
-  byId('block-info').textContent =
-    `Bloco ${state.block + 1}: recebe ${input} e entrega (1, 4, 768) ${output}.`;
+  byId('block-info').textContent = t.blockInfo(state.block + 1, input, output);
 }
 
 function updateGeneration() {
@@ -118,20 +118,20 @@ function updateGeneration() {
   byId('generated-ids').innerHTML = ids
     .map((id, index) => {
       const isNew = index >= data.ids.length;
-      const label = isNew ? `+${index - data.ids.length + 1}` : 'CONTEXTO';
+      const label = isNew ? `+${index - data.ids.length + 1}` : t.genContext;
       return `<span class="${isNew ? 'new-id' : ''}"><small>${label}</small>${id}</span>`;
     })
     .join('');
 
   if (state.round === 0) {
-    byId('generation-info').textContent =
-      '4 IDs iniciais. Revele a primeira escolha salva do argmax.';
+    byId('generation-info').textContent = t.genInfoStart;
   } else {
-    const isComplete = state.round === 10;
-    byId('generation-info').textContent =
-      `Rodada ${state.round} de 10 · ID ${ids.at(-1)} anexado · ` +
-      `contexto com ${ids.length} tokens. ` +
-      (isComplete ? 'Fim do registro.' : 'A próxima rodada recebe esse contexto ampliado.');
+    byId('generation-info').textContent = t.genInfoRound(
+      state.round,
+      ids.at(-1),
+      ids.length,
+      state.round === 10,
+    );
   }
 
   byId('back-round').disabled = state.round === 0;
@@ -143,14 +143,16 @@ function updateAttention(query, key) {
     button.setAttribute('aria-pressed', button.dataset.cell === `${query},${key}`);
   });
 
-  const result =
-    key > query
-      ? 'futuro bloqueado; score recebe −∞ e peso após softmax é zero.'
-      : 'conexão permitida; score = Q · K / √64. Valor não exportado.';
+  const result = key > query ? t.attCellBlocked : t.attCellAllowed;
 
-  byId('attention-info').textContent =
-    `Cabeça ${state.head + 1} · query ${query} (${views.TOKEN_LABELS[query]}) → ` +
-    `key ${key} (${views.TOKEN_LABELS[key]}): ${result}`;
+  byId('attention-info').textContent = t.attCellInfo(
+    state.head + 1,
+    query,
+    views.TOKEN_LABELS[query],
+    key,
+    views.TOKEN_LABELS[key],
+    result,
+  );
 }
 
 function updateLearning(mode) {
@@ -181,9 +183,10 @@ function handleButtonClick(button) {
   }
   if (button.dataset.dim !== undefined) {
     all('[data-dim]').forEach(item => item.setAttribute('aria-pressed', item === button));
-    byId('dimension-info').textContent =
-      `E[${data.ids[state.token]}, ${button.dataset.dim}] · ` +
-      'um peso da tabela. Valor não exportado.';
+    byId('dimension-info').textContent = t.dimSingleInfo(
+      data.ids[state.token],
+      button.dataset.dim,
+    );
   }
   if (button.dataset.cell !== undefined) {
     const [query, key] = button.dataset.cell.split(',').map(Number);
@@ -239,8 +242,8 @@ function updateReadingProgress() {
 
   const learningIsVisible = byId('learning').getBoundingClientRect().top < innerHeight * 0.45;
   byId('reading-label').textContent = learningIsVisible
-    ? 'O papel do treinamento'
-    : `Passo ${currentStep + 1} / ${content.basicSteps[currentStep].title}`;
+    ? t.readingTraining
+    : t.readingStep(currentStep + 1, content.basicSteps[currentStep].title);
 
   all('#index a').forEach((link, index) => {
     if (index === currentStep && !learningIsVisible) link.setAttribute('aria-current', 'step');
@@ -259,10 +262,11 @@ function bindEvents() {
 
   byId('head').addEventListener('change', event => {
     state.head = Number(event.target.value);
-    byId('attention-info').textContent =
-      `Cabeça ${state.head + 1}: componentes ${state.head * 64}–${state.head * 64 + 63} ` +
-      'das projeções Q/K/V. A máscara é igual nas 12 cabeças; ' +
-      'os pesos de atenção não foram exportados.';
+    byId('attention-info').textContent = t.attHeadInfo(
+      state.head + 1,
+      state.head * 64,
+      state.head * 64 + 63,
+    );
   });
 
   document.addEventListener('click', handleDocumentClick);
@@ -306,9 +310,6 @@ updateGeneration();
 updateLearning('inference');
 updateReadingProgress();
 
-byId('parameter-note').textContent =
-  'O notebook registra 163.009.536 parâmetros: 38.597.376 na tabela de tokens ' +
-  'e outros 38.597.376 na saída. Sem contar a matriz de saída separadamente, ' +
-  'o registro chega a 124.412.160 — aproximadamente 124M.';
+byId('parameter-note').textContent = t.parameterNote;
 
 if (location.hash) requestAnimationFrame(() => revealDetailedOperation(location.hash));

@@ -1,6 +1,7 @@
 'use strict';
 
 window.GPTJourneyViews = (() => {
+  const t = window.t;
   const TOKEN_LABELS = ['Hello', ',', '␣I', '␣am'];
 
   function escapeHtml(value) {
@@ -39,43 +40,27 @@ window.GPTJourneyViews = (() => {
   const status = (id, text = '') => `<p class="selection" id="${id}" role="status">${text}</p>`;
 
   function normalizationFigure(isFinal) {
-    const scope = isFinal
-      ? 'Parâmetros da LayerNorm final.'
-      : 'Parâmetros da primeira LayerNorm do bloco.';
-
-    return (
-      flow([
-        ['x', '768 componentes'],
-        ['(x − μ) / √(σ² + ε)', 'ε = 0,00001'],
-        ['γ × z + β', '768 componentes'],
-      ]) +
-      note(
-        `Média e variância por token · variância populacional (unbiased=False). ${scope} A normalização aproxima média 0 e variância 1 antes de γ e β; após essa escala e deslocamento aprendidos, a saída não precisa manter esses valores.`,
-      )
-    );
+    const scope = t.normScope(isFinal);
+    return flow(t.normFlow) + note(t.normNote(scope));
   }
 
   function residualFigure(isSecond) {
     const input = isSecond ? 'r₁' : 'x';
-    const update = isSecond ? 'norm2 → FFN' : 'norm1 → atenção';
+    const update = t.residualUpdate(isSecond);
 
     return `
       <div class="residual">
-        <div class="shortcut">${input} · cópia preservada</div>
-        ${flow([
-          [input, 'entrada'],
-          [update, 'atualização'],
-          ['+', 'soma elemento a elemento'],
-        ])}
+        <div class="shortcut">${t.residualShortcut(input)}</div>
+        ${flow(t.residualFlow(input, update))}
       </div>
-      ${note('O atalho preserva a entrada. Na avaliação, o dropout não altera a atualização.')}
+      ${note(t.residualNote)}
     `;
   }
 
   function attentionFigure(config) {
     const headOptions = Array.from(
       { length: config.n_heads },
-      (_, index) => `<option value="${index}">${index + 1} de ${config.n_heads}</option>`,
+      (_, index) => `<option value="${index}">${t.attOption(index + 1, config.n_heads)}</option>`,
     ).join('');
 
     const header = TOKEN_LABELS.map(label => `<th>${label}</th>`).join('');
@@ -90,7 +75,7 @@ window.GPTJourneyViews = (() => {
                 <button
                   data-cell="${query},${key}"
                   class="${blocked ? 'blocked' : 'allowed'}"
-                  aria-label="Query ${query}, key ${key}: ${blocked ? 'bloqueada' : 'permitida'}"
+                  aria-label="${t.attCellAria(query, key, blocked)}"
                 >${blocked ? '×' : '●'}</button>
               </td>
             `;
@@ -100,41 +85,38 @@ window.GPTJourneyViews = (() => {
     ).join('');
 
     return `
-      <label>Cabeça <select id="head">${headOptions}</select></label>
+      <label>${t.attHead} <select id="head">${headOptions}</select></label>
       <div class="matrix-wrap">
         <table class="matrix">
-          <caption>Máscara causal · query nas linhas, key nas colunas</caption>
-          <thead><tr><th>Q ↓ / K →</th>${header}</tr></thead>
+          <caption>${t.attCaption}</caption>
+          <thead><tr><th>${t.attQK}</th>${header}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${status('attention-info', 'Selecione uma conexão para ver o que a máscara permite.')}
-      ${note('● conexão permitida · × futuro bloqueado. As cores não representam pesos de atenção. Cada cabeça usa 64 componentes; as projeções Q, K e V leem as 768 dimensões da entrada.')}
+      ${status('attention-info', t.attStatusDefault)}
+      ${note(t.attNote)}
     `;
   }
 
   function outputFigure() {
+    const [seq, pos, logits] = t.outShape;
     return `
-      ${flow([
-        ['768', 'vetor por posição'],
-        ['Wᵀ', '50.257 × 768 pesos'],
-        ['50.257', 'scores por posição'],
-      ])}
+      ${flow(t.outFlow)}
       <div class="output-shape">
-        1 <span>sequência</span> × 4 <span>posições</span> × 50.257 <span>logits</span>
+        1 <span>${seq}</span> × 4 <span>${pos}</span> × ${t.vocabSize} <span>${logits}</span>
       </div>
-      ${note('Shape registrado na célula 15. A out_head não tem bias e não compartilha pesos com tok_emb nesta implementação. Não há logits numéricos deste contexto salvos.')}
+      ${note(t.outNote)}
       <div class="probability">
-        <div class="eyebrow">DE SCORES A PROBABILIDADES</div>
+        <div class="eyebrow">${t.probEyebrow}</div>
         <div class="formula">pᵢ = exp(zᵢ) / Σⱼ exp(zⱼ)</div>
-        <p>Softmax converte os 50.257 logits de uma posição em probabilidades que somam 1. Cada entrada corresponde a um token do vocabulário, que pode ser apenas parte de uma palavra.</p>
+        <p>${t.probText}</p>
         <details>
-          <summary>Softmax é necessária para greedy?</summary>
-          <p>Não. Ela preserva a ordem dos scores: <code>argmax(z) = argmax(softmax(z))</code>. Por isso, o código local escolhe diretamente o maior logit. Na atenção, a softmax tem outro papel: normalizar os pesos entre posições permitidas.</p>
+          <summary>${t.probGreedySummary}</summary>
+          <p>${t.probGreedyText}</p>
         </details>
         <details>
-          <summary>E a temperatura?</summary>
-          <p>Na amostragem, usa-se <code>softmax(z / τ)</code>, com τ &gt; 0. Temperaturas menores concentram a distribuição; maiores a espalham. Dividir por uma temperatura positiva não muda o argmax. O registro desta aula usa greedy, sem amostragem.</p>
+          <summary>${t.probTempSummary}</summary>
+          <p>${t.probTempText}</p>
         </details>
       </div>
     `;
@@ -154,23 +136,23 @@ window.GPTJourneyViews = (() => {
                 (id, tokenIndex) => `
                   <button data-token="${tokenIndex}" aria-pressed="${tokenIndex === token}">
                     <span>${TOKEN_LABELS[tokenIndex]}</span>
-                    <small>ID ${id}</small>
-                    <small>posição ${tokenIndex}</small>
+                    <small>${t.tokIdLabel} ${id}</small>
+                    <small>${t.tokPosLabel} ${tokenIndex}</small>
                   </button>
                 `,
               )
               .join('')}
           </div>
-          ${status('token-info', `Selecionado: ${TOKEN_LABELS[token]} → ID ${data.ids[token]} → posição ${token}.`)}
-          ${note('Tokenização registrada · célula 15 do notebook. ␣ indica um espaço inicial — no GPT-2, o espaço faz parte do token (IDs 314 e 716 são “ I” e “ am”).')}
+          ${status('token-info', t.tokInfo(TOKEN_LABELS[token], data.ids[token], token))}
+          ${note(t.tokNote)}
         `;
       case 1:
         return `
           <div class="lookup">
             E[<span class="chosen-id">${data.ids[token]}</span>, :]
-            <span>→</span><strong>768</strong><small>componentes</small>
+            <span>→</span><strong>768</strong><small>${t.lookupUnit}</small>
           </div>
-          <p>Abra um dos 12 grupos de 64 dimensões:</p>
+          <p>${t.lookupGroupsIntro}</p>
           <div class="groups">
             ${Array.from(
               { length: 12 },
@@ -183,17 +165,13 @@ window.GPTJourneyViews = (() => {
           </div>
           <div id="dimension-grid"></div>
           ${status('dimension-info')}
-          ${note('Representação da tabela 50.257 × 768. Os índices são reais; os valores dos pesos não estão salvos.')}
+          ${note(t.lookupNote)}
         `;
       case 2:
         return `
-          ${flow([
-            ['E[token, d]', 'identidade'],
-            ['+ P[posição, d]', 'ordem'],
-            ['x[posição, d]', 'soma, não concatenação'],
-          ])}
-          ${status('position-info', `Token ${data.ids[token]}, posição ${token}: E[${data.ids[token]}, d] + P[${token}, d].`)}
-          ${note('O vetor de posição é compartilhado entre sequências do batch por broadcasting.')}
+          ${flow(t.posFlow)}
+          ${status('position-info', t.posInfo(data.ids[token], token))}
+          ${note(t.posNote)}
         `;
       case 3:
       case 9:
@@ -205,17 +183,13 @@ window.GPTJourneyViews = (() => {
         return residualFigure(index === 7);
       case 6:
         return `
-          ${flow([
-            ['768', 'entrada normalizada'],
-            ['3.072', 'Linear + GELU'],
-            ['768', 'Linear'],
-          ])}
+          ${flow(t.ffFlow)}
           <details>
-            <summary>Ver a transformação GELU</summary>
-            <div class="formula">½x [1 + tanh(√(2/π) (x + 0,044715x³))]</div>
-            <p>Fórmula usada pela classe GELU em gpt.py. A curva é uma função matemática; as ativações desta execução não foram exportadas.</p>
+            <summary>${t.ffSummary}</summary>
+            <div class="formula">${t.geluFormula}</div>
+            <p>${t.ffText}</p>
           </details>
-          ${note('Duas projeções aprendíveis com bias. A expansão ocorre nas componentes, não na quantidade de tokens.')}
+          ${note(t.ffNote)}
         `;
       case 8:
         return `
@@ -224,36 +198,32 @@ window.GPTJourneyViews = (() => {
               { length: config.n_layers },
               (_, index) => `
                 <button data-block="${index}" aria-pressed="${index === block}">
-                  <small>TRANSFORMER</small>${String(index + 1).padStart(2, '0')}<span>→</span>
+                  <small>${t.blockWord}</small>${String(index + 1).padStart(2, '0')}<span>→</span>
                 </button>
               `,
             ).join('')}
           </div>
           ${status('block-info')}
-          ${note('Os 12 registros TransformerBlock do notebook têm saída (1, 4, 768). Selecionar um bloco identifica sua posição, não revela ativações.')}
+          ${note(t.blocksNote)}
         `;
       case 10:
         return outputFigure();
       case 11:
         return `
-          ${flow([
-            ['Última posição', 'logits[:, −1, :]'],
-            ['argmax', 'ID de maior score'],
-            ['Anexar ID', 'novo contexto → modelo'],
-          ])}
-          <div class="record-label">REPRODUÇÃO DO REGISTRO · SMALL · SEM TREINAMENTO</div>
+          ${flow(t.genFlow)}
+          <div class="record-label">${t.genRecordLabel}</div>
           <div id="generated-ids" class="generated-ids"></div>
           <div class="generation-controls">
-            <button id="back-round">← ID anterior</button>
-            <button id="next-round" class="primary">Revelar próximo ID →</button>
-            <button id="reset-round">Reiniciar</button>
+            <button id="back-round">${t.genBack}</button>
+            <button id="next-round" class="primary">${t.genNext}</button>
+            <button id="reset-round">${t.genReset}</button>
           </div>
           ${status('generation-info')}
           <details>
-            <summary>Ver texto completo decodificado no notebook</summary>
+            <summary>${t.genFullTextSummary}</summary>
             <blockquote>${escapeHtml(data.text)}</blockquote>
           </details>
-          ${note('A página não executa inferência. Esta é a continuação efetivamente salva na célula 18, não uma frase escolhida para a apresentação. Os IDs são anexados à sequência; o tokenizador decodifica a sequência para exibir texto. O código recalcula o contexto a cada rodada, recortando-o ao limite configurado se necessário.')}
+          ${note(t.genNote)}
         `;
       default:
         return '';
@@ -262,9 +232,7 @@ window.GPTJourneyViews = (() => {
 
   function renderDetailedChapter(step, index, state, data) {
     const sourceLabel =
-      index === 0
-        ? 'chapter4_visual_lesson.ipynb · célula 15'
-        : `gpt.py · ${step.source}`;
+      index === 0 ? t.sourceLabelFirst : t.sourceLabel(step.source);
     const sourceCode =
       index === 0
         ? data.records['15'].code.split('logs =')[0]
@@ -277,19 +245,19 @@ window.GPTJourneyViews = (() => {
           <h2 id="title-${index}">${step.title}</h2>
           <p>${step.description}</p>
           <div class="shape">
-            <span>ENTRA</span><code>${escapeHtml(step.input)}</code>
-            <span>SAI</span><code>${escapeHtml(step.output)}</code>
+            <span>${t.shapeIn}</span><code>${escapeHtml(step.input)}</code>
+            <span>${t.shapeOut}</span><code>${escapeHtml(step.output)}</code>
           </div>
           <details class="source-code">
-            <summary>Ver código original ↗</summary>
+            <summary>${t.seeCode}</summary>
             <p>${sourceLabel}</p>
             <pre><code>${escapeHtml(sourceCode)}</code></pre>
           </details>
         </div>
         <div class="chapter-figure">
           <div class="figure-heading">
-            ${[0, 11].includes(index) ? 'REGISTRO DO NOTEBOOK' : 'ESTRUTURA DO CÓDIGO'}
-            <span>${index === 11 ? '10 NOVOS IDs' : 'GPT-2 SMALL'}</span>
+            ${[0, 11].includes(index) ? t.figHeadingRecord : t.figHeadingCode}
+            <span>${index === 11 ? t.figHeadingNewIds : t.figHeadingSmall}</span>
           </div>
           ${renderFigure(index, state, data)}
         </div>
@@ -304,7 +272,7 @@ window.GPTJourneyViews = (() => {
     const [start, end] = step.range;
     const tokenControl = `
       <label class="advanced-token">
-        Acompanhar token
+        ${t.trackToken}
         <select id="token">
           <option value="0">Hello · 15496</option>
           <option value="1">, · 11</option>
@@ -312,10 +280,7 @@ window.GPTJourneyViews = (() => {
           <option value="3" selected>␣am · 716</option>
         </select>
       </label>
-      <p class="shape-guide">
-        Como ler as formas: <code>(B, T, D)</code> = sequências, tokens e componentes.
-        Neste registro: <code>(1, 4, 768)</code>.
-      </p>
+      <p class="shape-guide">${t.shapeGuide}</p>
     `;
 
     return `
@@ -323,7 +288,7 @@ window.GPTJourneyViews = (() => {
         <div class="basic-heading">
           <span class="step-number">0${index + 1}</span>
           <div>
-            <div class="eyebrow">PASSO ${index + 1} / ${step.subtitle}</div>
+            <div class="eyebrow">${t.stepLabel(index + 1, step.subtitle)}</div>
             <h2 id="basic-title-${index}">${step.title}</h2>
           </div>
         </div>
@@ -332,7 +297,7 @@ window.GPTJourneyViews = (() => {
         <p class="takeaway">${step.takeaway}</p>
         <details class="advanced" id="advanced${index + 1}">
           <summary>
-            <span>Avançado <small>${step.detail}</small></span>
+            <span>${t.advanced} <small>${step.detail}</small></span>
             <span class="expand-hint" aria-hidden="true">+</span>
           </summary>
           <div class="advanced-body">
@@ -341,7 +306,7 @@ window.GPTJourneyViews = (() => {
           </div>
         </details>
         <a class="basic-next" href="${index < 3 ? `#step${index + 2}` : '#learning'}">
-          ${index < 3 ? `Próximo: passo ${index + 2}` : 'Por que o modelo ainda gera texto sem sentido?'}
+          ${index < 3 ? t.basicNextStep(index + 2) : t.basicNextLast}
           <span>↓</span>
         </a>
       </section>

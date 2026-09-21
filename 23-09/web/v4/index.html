@@ -9,30 +9,73 @@
     />
     <meta name="theme-color" content="#07090d" />
     <title>GPT por dentro — v4 · do texto à próxima previsão</title>
+    <script>
+      // Set language + theme before paint to avoid a flash.
+      (function () {
+        var d = document.documentElement;
+        try {
+          var lang = localStorage.getItem('lang');
+          if (lang === 'en' || lang === 'pt-BR') d.lang = lang;
+          var theme = localStorage.getItem('theme');
+          if (!theme)
+            theme = matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+          d.dataset.theme = theme;
+        } catch (e) {
+          d.dataset.theme = 'dark';
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="gpt_journey.css" />
   </head>
   <body>
-    <a class="skip" href="#step1">Pular para a jornada</a>
+    <a class="skip" href="#step1" data-i18n="skip">Pular para a jornada</a>
 
     <header>
-      <a class="brand" href="#">GPT <span>por dentro</span></a>
-      <span class="edition">V4 / CAPÍTULO 04</span>
-      <a href="#sources">Dados e código ↗</a>
+      <a class="brand" href="#">GPT <span data-i18n="brandSub">por dentro</span></a>
+      <span class="edition" data-i18n="edition">V4 / CAPÍTULO 04</span>
+      <div class="controls">
+        <a href="#sources" data-i18n="sourcesLink">Dados e código ↗</a>
+        <button
+          id="lang-toggle"
+          class="toggle"
+          type="button"
+          data-i18n="langLabel"
+          data-i18n-aria="langAria"
+          aria-label="Switch to English"
+        >
+          EN
+        </button>
+        <button
+          id="theme-toggle"
+          class="toggle"
+          type="button"
+          aria-label="Tema claro"
+        >
+          ☾
+        </button>
+      </div>
     </header>
 
     <div class="opening">
       <div class="opening-copy">
-        <div class="eyebrow">UMA JORNADA PELA ARQUITETURA GPT-2</div>
-        <h1>O caminho<br />de um token.</h1>
-        <p>
+        <div class="eyebrow" data-i18n="heroEyebrow">
+          UMA JORNADA PELA ARQUITETURA GPT-2
+        </div>
+        <h1 data-i18n-html="heroTitle">O caminho<br />de um token.</h1>
+        <p data-i18n="heroLead">
           Um GPT calcula a distribuição do próximo token a partir do contexto.
           A resposta cresce repetindo esse processo, um token por vez.
         </p>
-        <a class="primary" href="#step1">Acompanhar a frase <span>↓</span></a>
+        <a class="primary" href="#step1" data-i18n-html="heroCta"
+          >Acompanhar a frase <span>↓</span></a
+        >
       </div>
 
       <div
         class="opening-map"
+        data-i18n-aria="heroMapAria"
         aria-label="Visão geral: texto, IDs, vetores, 12 blocos, logits"
       >
         <div class="map-label">HELLO, I AM</div>
@@ -42,20 +85,26 @@
         <div class="beam"></div>
         <div id="model-map"></div>
         <div class="beam"></div>
-        <div class="map-label">50.257 LOGITS POR POSIÇÃO</div>
-        <p>12 linhas = blocos · 12 marcas por linha = cabeças de atenção</p>
+        <div class="map-label" data-i18n="mapLogits">50.257 LOGITS POR POSIÇÃO</div>
+        <p data-i18n="mapCaption">
+          12 linhas = blocos · 12 marcas por linha = cabeças de atenção
+        </p>
       </div>
 
       <div class="opening-bottom">
-        <span>01 — 04 <span class="muted">/ role para acompanhar</span></span>
-        <span>Registros do notebook · pesos não treinados</span>
+        <span data-i18n-html="openingBottomLeft"
+          >01 — 04 <span class="muted">/ role para acompanhar</span></span
+        >
+        <span data-i18n="openingBottomRight"
+          >Registros do notebook · pesos não treinados</span
+        >
       </div>
     </div>
 
     <div class="reading-bar">
       <span id="reading-label">Passo 1 / Preparando o texto</span>
       <details class="index">
-        <summary>Os 4 passos</summary>
+        <summary data-i18n="indexSummary">Os 4 passos</summary>
         <nav id="index"></nav>
       </details>
       <div id="reading-progress"></div>
@@ -64,30 +113,43 @@
     <main id="journey"></main>
 
     <section id="learning" class="learning" aria-labelledby="learning-title">
-      <div class="eyebrow">DEPOIS DO PERCURSO / O PAPEL DO TREINAMENTO</div>
-      <h2 id="learning-title">
+      <div class="eyebrow" data-i18n="learningEyebrow">
+        DEPOIS DO PERCURSO / O PAPEL DO TREINAMENTO
+      </div>
+      <h2 id="learning-title" data-i18n-html="learningTitle">
         A arquitetura está pronta.<br />A linguagem ainda precisa ser aprendida.
       </h2>
-      <p class="learning-lead">
+      <p class="learning-lead" data-i18n="learningLead">
         A continuação acima vem de um modelo sem treinamento. As matrizes começam
         com valores aleatórios; os parâmetros de LayerNorm começam com escala 1 e
         deslocamento 0. Ter os blocos certos não basta para produzir texto coerente.
       </p>
-      <div class="mode-controls" role="group" aria-label="Comparar geração e treinamento">
-        <button data-mode="inference" aria-pressed="true">Durante a geração</button>
-        <button data-mode="training" aria-pressed="false">Durante o treinamento</button>
+      <div
+        class="mode-controls"
+        role="group"
+        data-i18n-aria="modeGroupAria"
+        aria-label="Comparar geração e treinamento"
+      >
+        <button data-mode="inference" aria-pressed="true" data-i18n="modeInference">
+          Durante a geração
+        </button>
+        <button data-mode="training" aria-pressed="false" data-i18n="modeTraining">
+          Durante o treinamento
+        </button>
       </div>
       <div id="learning-flow" role="status"></div>
 
       <details>
-        <summary>Como o texto fornece o alvo de treinamento?</summary>
-        <p>
+        <summary data-i18n="trainTargetSummary">
+          Como o texto fornece o alvo de treinamento?
+        </summary>
+        <p data-i18n-html="trainTargetP1">
           O alvo é o token seguinte na sequência original. Nos IDs já registrados,
           a posição de <code>Hello</code> tem como próximo alvo <code>,</code>; a
           vírgula tem <code>␣I</code>; e <code>␣I</code> tem <code>␣am</code>.
           O alvo após <code>␣am</code> exigiria a continuação do texto de treino.
         </p>
-        <p>
+        <p data-i18n-html="trainTargetP2">
           É possível calcular a perda de várias posições no mesmo forward. A máscara
           causal impede que cada posição consulte seu futuro, mesmo com o texto inteiro
           disponível no batch.
@@ -95,9 +157,11 @@
       </details>
 
       <details>
-        <summary>Por que “GPT-2 124M” não é a contagem exata desta implementação?</summary>
+        <summary data-i18n="paramSummary">
+          Por que “GPT-2 124M” não é a contagem exata desta implementação?
+        </summary>
         <p id="parameter-note"></p>
-        <p>
+        <p data-i18n-html="paramP2">
           O nome identifica a configuração Small. Nesta implementação,
           <code>tok_emb</code> e <code>out_head</code> têm matrizes separadas;
           compartilhar essas matrizes reduz a contagem. O código também usa
@@ -105,42 +169,52 @@
         </p>
       </details>
 
-      <a class="bridge" href="#sources">
+      <a class="bridge" href="#sources" data-i18n-html="learningBridge">
         <span>↓</span> Conferir os registros que sustentam a explicação.
       </a>
     </section>
 
     <section id="sources" class="sources">
-      <div class="eyebrow">RASTREABILIDADE</div>
-      <h2>O que sustenta esta jornada.</h2>
-      <p>
+      <div class="eyebrow" data-i18n="sourcesEyebrow">RASTREABILIDADE</div>
+      <h2 data-i18n="sourcesTitle">O que sustenta esta jornada.</h2>
+      <p data-i18n-html="sourcesLead">
         IDs, shapes e continuação vêm das saídas já salvas no notebook. Os diagramas
         explicam as operações de <code>gpt.py</code>. Os pesos, ativações e probabilidades
         desta execução não foram exportados; por isso, não são apresentados como valores medidos.
       </p>
       <div id="source-records"></div>
       <p>
-        <a href="https://github.com/rasbt/LLMs-from-scratch/blob/main/ch04/01_main-chapter-code/gpt.py">
+        <a
+          href="https://github.com/rasbt/LLMs-from-scratch/blob/main/ch04/01_main-chapter-code/gpt.py"
+          data-i18n="sourcesChapterLink"
+        >
           Código de referência do capítulo ↗
         </a>
       </p>
       <p>
-        <a href="../../lesson/chapter4_visual_lesson.ipynb">Notebook da aula ↗</a> ·
-        <a href="../../lesson/gpt.py">Implementação original ↗</a> ·
-        <a href="../v3/index.html">V3 ↗</a>
+        <a href="../../lesson/chapter4_visual_lesson.ipynb" data-i18n="sourcesNotebookLink"
+          >Notebook da aula ↗</a
+        >
+        ·
+        <a href="../../lesson/gpt.py" data-i18n="sourcesImplLink"
+          >Implementação original ↗</a
+        >
       </p>
     </section>
 
     <footer>
-      <span>Build a Large Language Model (From Scratch) · Sebastian Raschka</span>
-      <a href="#">Voltar ao início ↑</a>
+      <span data-i18n="footerText"
+        >Build a Large Language Model (From Scratch) · Sebastian Raschka</span
+      >
+      <a href="#" data-i18n="footerTop">Voltar ao início ↑</a>
     </footer>
 
-    <noscript>
+    <noscript data-i18n="noscript">
       Ative JavaScript para explorar a jornada. Os dados também estão em
       chapter4_visual_lesson.ipynb.
     </noscript>
 
+    <script src="i18n.js"></script>
     <script src="../shared/gpt_journey_data.js"></script>
     <script src="content.js"></script>
     <script src="views.js"></script>
