@@ -179,6 +179,7 @@ window.I18N = {
 
     sourceLabelFirst: 'chapter4_visual_lesson.ipynb · célula 15',
     sourceLabel: source => `gpt.py · ${source}`,
+    sourceLabelForward: source => `gpt.py · ${source}.forward`,
     figHeadingRecord: 'REGISTRO DO NOTEBOOK',
     figHeadingCode: 'ESTRUTURA DO CÓDIGO',
     figHeadingNewIds: '10 NOVOS IDs',
@@ -417,6 +418,7 @@ window.I18N = {
 
     sourceLabelFirst: 'chapter4_visual_lesson.ipynb · cell 15',
     sourceLabel: source => `gpt.py · ${source}`,
+    sourceLabelForward: source => `gpt.py · ${source}.forward`,
     figHeadingRecord: 'NOTEBOOK RECORD',
     figHeadingCode: 'CODE STRUCTURE',
     figHeadingNewIds: '10 NEW IDs',

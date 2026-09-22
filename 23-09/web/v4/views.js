@@ -39,6 +39,36 @@ window.GPTJourneyViews = (() => {
   const note = text => `<p class="figure-note">${text}</p>`;
   const status = (id, text = '') => `<p class="selection" id="${id}" role="status">${text}</p>`;
 
+  // Several steps live inside one shared class (GPTModel/TransformerBlock forward).
+  // Extract the line(s) matching each operation so "see original code" corresponds
+  // to the step instead of repeating the whole class. [src, startNeedle, endNeedle].
+  const CODE_EXCERPTS = {
+    1: ['GPTModel', 'self.tok_emb(in_idx)', 'self.tok_emb(in_idx)'],
+    2: ['GPTModel', 'self.pos_emb(', 'tok_embeds + pos_embeds'],
+    5: ['TransformerBlock', '# Shortcut connection for attention', 'x = x + shortcut'],
+    7: ['TransformerBlock', '# Shortcut connection for feed-forward', 'x = x + shortcut'],
+    8: ['GPTModel', 'self.trf_blocks(x)', 'self.trf_blocks(x)'],
+    10: ['GPTModel', 'self.out_head(x)', 'return logits'],
+  };
+
+  function excerpt(code, startNeedle, endNeedle) {
+    const lines = code.split('\n');
+    const start = lines.findIndex(line => line.includes(startNeedle));
+    if (start === -1) return code; // ponytail: fall back to whole class if data shifts
+    let end = start;
+    for (let i = start; i < lines.length; i++) {
+      if (lines[i].includes(endNeedle)) {
+        end = i;
+        break;
+      }
+    }
+    const chosen = lines.slice(start, end + 1);
+    const indent = Math.min(
+      ...chosen.filter(line => line.trim()).map(line => line.match(/^\s*/)[0].length),
+    );
+    return chosen.map(line => line.slice(indent)).join('\n');
+  }
+
   function normalizationFigure(isFinal) {
     const scope = t.normScope(isFinal);
     return flow(t.normFlow) + note(t.normNote(scope));
@@ -231,12 +261,20 @@ window.GPTJourneyViews = (() => {
   }
 
   function renderDetailedChapter(step, index, state, data) {
-    const sourceLabel =
-      index === 0 ? t.sourceLabelFirst : t.sourceLabel(step.source);
-    const sourceCode =
-      index === 0
-        ? data.records['15'].code.split('logs =')[0]
-        : data.code[step.source];
+    const spec = CODE_EXCERPTS[index];
+    let sourceLabel;
+    let sourceCode;
+    if (index === 0) {
+      sourceLabel = t.sourceLabelFirst;
+      sourceCode = data.records['15'].code.split('logs =')[0];
+    } else if (spec) {
+      const [src, startNeedle, endNeedle] = spec;
+      sourceLabel = t.sourceLabelForward(src);
+      sourceCode = excerpt(data.code[src], startNeedle, endNeedle);
+    } else {
+      sourceLabel = t.sourceLabel(step.source);
+      sourceCode = data.code[step.source];
+    }
 
     return `
       <section class="chapter" id="s${index}" aria-labelledby="title-${index}">
