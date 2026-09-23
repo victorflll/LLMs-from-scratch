@@ -269,7 +269,7 @@ const GPTJourneyContentAll = {
         title: 'Add the context to the input.',
         description:
           'The block kept its input before normalization. It now adds this copy to the update produced by attention, preserving the width of the vector. The shortcut also provides a direct path for the gradient during training; it helps optimization, without guaranteeing that every gradient problem disappears.',
-        input: 'x + attention(norm1(x))',
+        input: 'r₁ = x + attention(norm1(x))',
         output: '(1, 4, 768)',
         source: 'TransformerBlock',
         bridge: 'The first sum moves on to the transformation of each token.',
